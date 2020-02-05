@@ -2,7 +2,7 @@
 import rospy
 import serial
 import sys
-from math import sin, cos
+from math import sin, cos, radians
 from sensor_msgs.msg import Imu
 from sensor_msgs.msg import MagneticField
 from geometry_msgs.msg import Quaternion
@@ -30,9 +30,9 @@ def parse_imu_data(imu_data):
 	mag_msg.header.stamp = rospy.Time.now()
 
 	sections = line.split(',')
-	yaw = float(sections[1])
-	pitch = float(sections[2])
-	roll = float(sections[3])
+	yaw = radians(float(sections[1]))
+	pitch = radians(float(sections[2]))
+	roll = radians(float(sections[3]))
 	w, x, y, z = euler_to_quaternion(yaw, pitch, roll)
 
 	orient_field.x = x
@@ -65,17 +65,17 @@ if __name__ == "__main__":
 	mag_out = rospy.Publisher("/mag_out", MagneticField, queue_size=10)
 	port_handle = rospy.get_param("~port","/dev/ttyUSB0")
 	baud_rate = rospy.get_param("~baudrate", 115200)
-	# try:
-	# 	port = serial.Serial(port_handle, baud_rate, timeout=3.0)
-	# except serial.serialutil.SerialException:
-	# 	rospy.loginfo("Serial port exception, shutting down imu_driver node...")
-	# 	sys.exit()
-	file_handle = open("test_imu_data.txt", "r")
+	try:
+		port = serial.Serial(port_handle, baud_rate, timeout=3.0)
+	except serial.serialutil.SerialException:
+		rospy.loginfo("Serial port exception, shutting down imu_driver node...")
+		sys.exit()
+	# file_handle = open("/home/rvy/catkin_ws/src/imu_driver/scripts/test_imu_data.txt", "r")
 	rospy.logdebug("Setting up serial port for IMU device, port = %s, baud rate = %s" % (port_handle, baud_rate))
 	try:
 		while not rospy.is_shutdown():
-			# line = port.readline()
-			line = file_handle.readline()
+			line = port.readline()
+			# line = file_handle.readline()
 			if line == "":
 				rospy.logwarn("IMU: no data")
 			else:
@@ -84,7 +84,7 @@ if __name__ == "__main__":
 					imu_msg, mag_msg = parse_imu_data(line)
 					imu_out.publish(imu_msg)
 					mag_out.publish(mag_msg)
-			rospy.sleep(0.001)
+			# rospy.sleep(0.001)
 	except rospy.ROSInterruptException:
 		port.close()
 	except serial.serialutil.SerialException:
