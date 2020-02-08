@@ -38,26 +38,35 @@ mag_x = traj_mag_out.mag_x;
 mag_y = traj_mag_out.mag_y;
 mag_z = traj_mag_out.mag_z;
 
-% Determining hard and soft iron effects for magnetometer calibration
-scatter(mag_x(1000:4000,:)+0.0106, mag_y(1000:4000,:)+0.0085, 5, 'filled');
-ax = gca;
-ellipse = fit_ellipse(mag_x(1000:4000,:)+0.0106, mag_y(1000:4000,:)+0.0085, ax);
+% Getting sensor bias while stationary
+[mag_bias, gyro_bias, acc_bias] = get_bias();
 
+% Determining hard and soft iron effects for magnetometer calibration
+% scatter(mag_x(1000:4000,:)+0.0106, mag_y(1000:4000,:)+0.0085, 5, 'filled');
+% ax = gca;
+% ellipse = fit_ellipse(mag_x(1000:4000,:)+0.0106, mag_y(1000:4000,:)+0.0085, ax);
+
+fig1 = figure;
 % Integrate the gyro z-axis angular velocity to get yaw
-subplot(2, 1, 1);
+subplot(3, 1, 1);
+ang_z_corr = ang_z + gyro_bias(1,3);
 steps = (1:length(ang_z));
 steps = steps';
 yaw_gyro = cumtrapz(ang_z);
-plot(steps, yaw_gyro);
-subplot(2, 1, 2);
-yaw_mag = unwrap(atan2(mag_y+0.0085, mag_x+0.0106));
+plot(steps, unwrap(wrapToPi(yaw_gyro)));
+subplot(3, 1, 2);
+yaw_mag = -unwrap(atan2(mag_y+0.0085, mag_x+0.0106));
 plot(steps, yaw_mag);
+subplot(3, 1, 3);
+plot(steps, unwrap(yaw));
 
-% Integrate forward acceleration into forward velocity
-% steps = (1:length(acc_x));
-% steps = steps';
-% vel_x = cumtrapz(acc_x);
-% plot(steps, vel_x);
+fig2 = figure;
+%Integrate forward acceleration into forward velocity
+steps = (1:length(acc_x));
+steps = steps';
+vel_x = cumtrapz(acc_x);
+fig3 = figure;
+plot(steps, vel_x);
 % plot(mag_x, mag_y);
 
 % yaw_gyro = trapz(ang_x);
