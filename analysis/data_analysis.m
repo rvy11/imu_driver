@@ -48,7 +48,7 @@ subplot(2, 1, 1);
 steps = (1:length(ang_z));
 steps = steps';
 yaw_gyro = cumtrapz(ang_z);
-plot(steps, -yaw_gyro);
+plot(steps, yaw_gyro);
 subplot(2, 1, 2);
 yaw_mag = unwrap(atan2(mag_y+0.0085, mag_x+0.0106));
 plot(steps, yaw_mag);
