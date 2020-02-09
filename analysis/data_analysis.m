@@ -48,26 +48,74 @@ mag_z = traj_mag_out.mag_z;
 
 fig1 = figure;
 % Integrate the gyro z-axis angular velocity to get yaw
-subplot(3, 1, 1);
+% subplot(3, 1, 1);
 ang_z_corr = ang_z + gyro_bias(1,3);
 steps = (1:length(ang_z));
 steps = steps';
 yaw_gyro = cumtrapz(ang_z);
-plot(steps, unwrap(wrapToPi(yaw_gyro)));
-subplot(3, 1, 2);
-yaw_mag = -unwrap(atan2(mag_y+0.0085, mag_x+0.0106));
+% plot(steps, yaw_gyro);
+% subplot(3, 1, 2);
+yaw_mag = unwrap(-atan2(mag_y+0.0085, mag_x+0.0106));
 plot(steps, yaw_mag);
-subplot(3, 1, 3);
-plot(steps, unwrap(yaw));
+% subplot(3, 1, 3);
+% plot(steps, unwrap(yaw));
 
-fig2 = figure;
 %Integrate forward acceleration into forward velocity
 steps = (1:length(acc_x));
 steps = steps';
-vel_x = cumtrapz(acc_x);
-fig3 = figure;
-plot(steps, vel_x);
+corr_acc_x = acc_x-acc_bias(1,1);
+corr_acc_y = acc_y-acc_bias(1,2);
+corr_acc_z = acc_z-acc_bias(1,3);
+% subplot(2,1,1);
+% plot(steps, corr_acc_x);
+corr_acc_x = corr_acc_x-mean(corr_acc_x);
+corr_acc_y = corr_acc_y-mean(corr_acc_y);
+corr_acc_z = corr_acc_z-mean(corr_acc_z);
+% subplot(2,1,2);
+% plot(steps, corr_acc_x);
+acc_x_ned = zeros(length(corr_acc_x), 1);
+acc_y_ned = zeros(length(corr_acc_y), 1);
+acc_z_ned = zeros(length(corr_acc_z), 1);
+for i=1:length(acc_y)
+    R_ned2b = eulerToRotationMatrix(roll(i), pitch(i), yaw(i));
+    R_b2ned = R_ned2b';
+    temp = (R_b2ned * [corr_acc_x(i); corr_acc_y(i); corr_acc_z(i)])+[0; 0; 9.81];
+    acc_x_ned(i) = temp(1);
+    acc_y_ned(i) = temp(2);
+    acc_z_ned(i) = temp(3);
+end
+
+% vel_x = zeros(length(acc_x_ned));
+% vel_y = zeros(length(acc_y_ned));
+acc_x_ned(1) = 0;
+acc_y_ned(1) = 0;
+
+time_imu = (imu_nsecs - min(imu_nsecs))/1000000000;
+dt_imu = [time_imu(1); diff(time_imu)];
+% temp_vel_x = 0;
+% temp_vel_y = 0;
+% for j=1:length(acc_x_ned)
+%     temp_vel_x = temp_vel_x + acc_x_ned(j)*dt_imu(j);
+%     temp_vel_y = temp_vel_y + acc_y_ned(j)*dt_imu(j);
+%     vel_x(j) = temp_vel_x;
+%     vel_y(j) = temp_vel_y;
+% end
+
+vel_x = cumtrapz(acc_x_ned.*dt_imu);
+% vel_x = filter(ones(length(acc_x_ned), 1), 1, acc_x_ned.*dt_imu);
+% vel_y = filter(ones(length(acc_y_ned), 1), 1, acc_y_ned.*dt_imu);
+vel_y = cumtrapz(acc_y_ned.*dt_imu);
+forward_vel_int = sqrt(vel_x.^2 + vel_y.^2);
+fig2 = figure;
+subplot(2, 1, 1);
+plot(steps, forward_vel_int);
+% plot((1:length(acc_x)), sqrt(acc_x.^2 + acc_y.^2));
 % plot(mag_x, mag_y);
+subplot(2, 1, 2);
+north_vel = diff(northing)./diff(gps_secs);
+east_vel = diff(easting)./diff(gps_secs);
+forward_vel = sqrt(north_vel.^2 + east_vel.^2);
+plot((1:length(forward_vel)), forward_vel);
 
 % yaw_gyro = trapz(ang_x);
 % subplot(3, 1, 1);
