@@ -1,6 +1,6 @@
 % Plot and return FFT of signal
 function fft_out = plot_fft(X, Fs, L)
-    fig = figure;
+%     fig = figure;
     Y = fft(X);
     P2 = abs(Y/L);
     P1 = P2(1:L/2+1);
