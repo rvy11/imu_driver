@@ -3,51 +3,54 @@
 % Author: Robin Yohannan
 clear;
 close all;
-load('stat_data.mat');
-load('traj_data.mat');
-% GPS data
-traj_gps_out(1, :) = [];
-gps_secs = traj_gps_out.secs;
-gps_nsecs = traj_gps_out.nsecs;
-easting = traj_gps_out.utm_east;
-northing = traj_gps_out.utm_north;
+
+gps_data = readtable('2020-02-04-21-19-47_trajectory_gps.csv', 'HeaderLines', 1);
+imu_data = readtable('2020-02-04-21-19-47_trajectory_imu.csv', 'HeaderLines', 1);
+mag_data = readtable('2020-02-04-21-19-47_trajectory_mag.csv', 'HeaderLines', 1);
+
+gps_time_raw = gps_data{:,1};
+gps_time = gps_time_raw - gps_time_raw(1);
+gps_secs = gps_time / 1e9;
+easting = gps_data{:,8};
+northing = gps_data{:,9};
 
 % IMU data
-traj_imu_out(1, :) = [];
-imu_secs = traj_imu_out.secs;
-imu_nsecs = traj_imu_out.nsecs;
+imu_time_raw = imu_data{:,1};
+imu_time = imu_time_raw - imu_time_raw(1);
+imu_secs = imu_time / 1e9;
+imu_traj_secs = imu_secs(4000:end,:);
 % Quaternion to Euler Angle Conversion
-q_x = traj_imu_out.ori_x;
-q_y = traj_imu_out.ori_y;
-q_z = traj_imu_out.ori_z;
-q_w = traj_imu_out.ori_w;
+q_x = imu_data{:,5};
+q_y = imu_data{:,6};
+q_z = imu_data{:,7};
+q_w = imu_data{:,8};
 roll = atan2(2*(q_w.*q_x + q_y.*q_z), 1 - 2*(q_x.*q_x + q_y.*q_y));
 sin_pitch = 2*(q_w.*q_y - q_z.*q_x);
 complex_pitch = asin(sin_pitch).*(abs(sin_pitch) < 1.0);
 out_of_range = (sign(sin_pitch)*(pi/2)).*(abs(sin_pitch) >= 1.0);
 pitch = complex_pitch + out_of_range;
 yaw = atan2(2*(q_w.*q_z + q_x.*q_y), 1 - 2*(q_y.*q_y + q_z.*q_z));
+
 % Gyro and Accel Data
-ang_x = traj_imu_out.ang_x;
-ang_y = traj_imu_out.ang_y;
-ang_z = traj_imu_out.ang_z;
-acc_x = traj_imu_out.lin_x;
-acc_y = traj_imu_out.lin_y;
-acc_z = traj_imu_out.lin_z;
+ang_x = imu_data{:,18};
+ang_y = imu_data{:,19};
+ang_z = imu_data{:,20};
+acc_x = imu_data{:,30};
+acc_y = imu_data{:,31};
+acc_z = imu_data{:,32};
 
 % Calculating dt for integral
-imu_nsecs = imu_nsecs(4000:end,:);
-time_imu = (imu_nsecs - min(imu_nsecs))/1000000000;
-dt_imu = [time_imu(1); diff(time_imu)];
+dt_imu = [imu_secs(1); diff(imu_secs)];
+dt_imu = dt_imu(4000:end,:);
 Fs = 1/mean(dt_imu);
 
 % Magnetometer Data
-traj_mag_out(1, :) = [];
-mag_secs = traj_mag_out.secs;
-mag_nsecs = traj_mag_out.nsecs;
-mag_x = traj_mag_out.mag_x;
-mag_y = traj_mag_out.mag_y;
-mag_z = traj_mag_out.mag_z;
+mag_time_raw = mag_data{:,1};
+mag_time = mag_time_raw - mag_time_raw(1);
+mag_secs = mag_time / 1e9;
+mag_x = mag_data{:,5};
+mag_y = mag_data{:,6};
+mag_z = mag_data{:,7};
 
 % Getting sensor bias while stationary
 [mag_bias, gyro_bias, acc_bias] = get_bias();
@@ -57,88 +60,77 @@ mag_z = traj_mag_out.mag_z;
 % ax = gca;
 % ellipse = fit_ellipse(mag_x(1000:4000,:)+0.0106, mag_y(1000:4000,:)+0.0085, ax);
 
-fig1 = figure;
 % Integrate the gyro z-axis angular velocity to get yaw
 % subplot(2, 1, 1);
+f1 = figure;
+% subplot(3, 1, 1);
 ang_z = ang_z(4000:end,:);
-ang_z_corr = ang_z + gyro_bias(1,3);
-subplot(2, 4, 1);
-plot_fft(ang_z_corr, Fs, length(ang_z_corr));
-ang_z_corr = highpass(ang_z_corr, 5, Fs);
-subplot(2, 4, 5);
-plot_fft(ang_z_corr, Fs, length(ang_z_corr));
+ang_z_corr = ang_z - gyro_bias(1,3);
+% ang_z_corr = ang_z 
+% plot_fft(ang_z_corr, Fs, length(ang_z_corr));
+% ang_z_corr = highpass(ang_z_corr, 1, Fs);
+% subplot(3, 1, 2);
+% plot_fft(ang_z_corr, Fs, length(ang_z_corr));
+% subplot(3, 1, 3);
+yaw_gyro = cumtrapz(ang_z_corr);
+yaw_gyro = yaw_gyro - yaw_gyro(1);
+plot(imu_traj_secs, yaw_gyro);
+hold on;
+% subplot(3, 1, 2);
+plot_fft(yaw_gyro, Fs, length(yaw_gyro));
+% yaw_gyro = highpass(yaw_gyro, 1, Fs);
 
+% f1 = figure;
+% subplot(2, 1, 1);
 mag_x = mag_x(4000:end,:);
-subplot(2, 4, 2);
-plot_fft(mag_x, Fs, length(mag_x));
-% mag_x = lowpass(mag_x, 50, Fs);
-subplot(2, 4, 6);
-plot_fft(mag_x, Fs, length(mag_x));
+% plot_fft(mag_x, Fs, length(mag_x));
+% subplot(2, 1, 2);
+% mag_x = lowpass(mag_x, 0.1, Fs);
+% plot_fft(mag_x, Fs, length(mag_x));
 
 mag_y = mag_y(4000:end,:);
-subplot(2, 4, 3);
-plot_fft(mag_y, Fs, length(mag_y));
+% plot_fft(mag_y, Fs, length(mag_y));
 % mag_y = lowpass(mag_y, 50, Fs);
-subplot(2, 4, 7);
-plot_fft(mag_y, Fs, length(mag_y));
+% plot_fft(mag_y, Fs, length(mag_y));
 
-steps = (1:length(ang_z_corr));
-steps = steps';
-subplot(2, 4, 4);
 yaw_gyro = cumtrapz(ang_z_corr.*dt_imu);
-plot(steps, yaw_gyro);
-% subplot(2, 1, 2);
+plot(imu_traj_secs, yaw_gyro);
 yaw_mag = unwrap(-atan2(mag_y+0.0085, mag_x+0.0106));
-subplot(2, 4, 8);
-plot(steps, yaw_mag);
-% subplot(3, 1, 3);
-% yaw_mag = wrapToPi(yaw_mag);
-fig4 = figure;
 yaw_est = 0.75*yaw_gyro + 0.25*yaw_mag;
-subplot(2, 1, 1);
-plot((1:length(yaw_est)), yaw_est);
-subplot(2, 1, 2);
-plot((1:length(yaw(4000:end,:))), unwrap(yaw(4000:end,:)));
-yaw_est = wrapToPi(yaw_est);
 
 %Integrate forward acceleration into forward velocity
 acc_x = acc_x(4000:end,:);
 acc_y = acc_y(4000:end,:);
 acc_z = acc_z(4000:end,:);
-steps = (1:length(acc_x));
-steps = steps';
 % corr_acc_x = acc_x-acc_bias(1,1);
 % corr_acc_y = acc_y-acc_bias(1,2);
 % corr_acc_z = acc_z-acc_bias(1,3);
 corr_acc_x = acc_x;
 corr_acc_y = acc_y;
 corr_acc_z = acc_z;
-% corr_acc_x = corr_acc_x - mean(corr_acc_x);
-% corr_acc_y = corr_acc_y - mean(corr_acc_y);
-% corr_acc_z = corr_acc_z - mean(corr_acc_z);
+corr_acc_x = corr_acc_x - mean(corr_acc_x);
+corr_acc_y = corr_acc_y - mean(corr_acc_y);
+corr_acc_z = corr_acc_z - mean(corr_acc_z);
 
-% L = length(corr_acc_x);
-% plot_fft(corr_acc_x, Fs, L);
-% 
-fig = figure;
+figw = figure;
 subplot(2, 3, 1);
 plot_fft(corr_acc_x, Fs, length(corr_acc_x));
-corr_acc_x = lowpass(corr_acc_x, 100, Fs);
-subplot(2, 3, 4);
-plot_fft(corr_acc_x, Fs, length(corr_acc_x));
+% corr_acc_x = lowpass(corr_acc_x, 0.2, Fs);
 subplot(2, 3, 2);
-plot_fft(corr_acc_y, Fs, length(corr_acc_y));
-corr_acc_y = lowpass(corr_acc_y, 75, Fs);
-subplot(2, 3, 5);
-plot_fft(corr_acc_y, Fs, length(corr_acc_y));
+plot_fft(corr_acc_x, Fs, length(corr_acc_x));
+
 subplot(2, 3, 3);
-plot_fft(corr_acc_z, Fs, length(corr_acc_z));
-corr_acc_z = lowpass(corr_acc_z, 100, Fs);
-subplot(2, 3, 6);
-plot_fft(corr_acc_z, Fs, length(corr_acc_z));
-% 
-% plot_fft(corr_acc_x, Fs, L);
-fig_rest = figure;
+plot_fft(corr_acc_y, Fs, length(corr_acc_y));
+% corr_acc_y = lowpass(corr_acc_y, 0.2, Fs);
+subplot(2, 3, 4);
+plot_fft(corr_acc_y, Fs, length(corr_acc_y));
+
+% subplot(2, 3, 5);
+% plot_fft(corr_acc_z, Fs, length(corr_acc_z));
+% corr_acc_z = bandpass(corr_acc_z, [0.1, 0.5], Fs);
+% subplot(2, 3, 6);
+% plot_fft(corr_acc_z, Fs, length(corr_acc_z));
+
 % acc_x_ned = zeros(length(corr_acc_x), 1);
 % acc_y_ned = zeros(length(corr_acc_y), 1);
 % acc_z_ned = zeros(length(corr_acc_z), 1);
@@ -160,54 +152,60 @@ fig_rest = figure;
 
 % vel_x = cumtrapz(acc_x_ned.*dt_imu);
 % vel_y = cumtrapz(acc_y_ned.*dt_imu);
-vel_x = cumtrapz(corr_acc_x.*dt_imu);
+
+vel_x = cumtrapz(corr_acc_x);
 vel_y = cumtrapz(corr_acc_y.*dt_imu);
-L = length(vel_x);
-subplot(2, 3, 1);
-plot_fft(vel_x, Fs, L);
-vel_x = bandpass(vel_x, [5, 100], Fs);
+
+figx = figure;
+subplot(2, 2, 1);
+plot_fft(vel_x, Fs, length(vel_x));
+% vel_x = bandpass(vel_x, [5, 100], Fs);
 % vel_x = lowpass(vel_x, 100, Fs);
 % vel_x = highpass(vel_x, 5, Fs);
-subplot(2, 3, 2);
-plot_fft(vel_x, Fs, L);
-subplot(2, 3, 3);
-plot_fft(vel_y, Fs, L);
-vel_y = bandpass(vel_y, [5, 100], Fs);
+subplot(2, 2, 2);
+plot_fft(vel_x, Fs, length(vel_x));
+
+subplot(2, 2, 3);
+plot_fft(vel_y, Fs, length(vel_y));
+% vel_y = bandpass(vel_y, [5, 100], Fs);
 % vel_y = lowpass(vel_y, 100, Fs);
 % vel_y = highpass(vel_y, 5, Fs);
-subplot(2, 3, 4);
-plot_fft(vel_y, Fs, L);
+subplot(2, 2, 4);
+plot_fft(vel_y, Fs, length(vel_y));
+
 forward_vel_int = sqrt(vel_x.^2 + vel_y.^2);
-L = length(forward_vel_int);
-% subplot(2, 3, 2);
-% plot_fft(forward_vel_int, Fs, L);
+fy = figure;
+subplot(2, 1, 1);
+plot_fft(forward_vel_int, Fs, length(forward_vel_int));
 % forward_vel_int = bandpass(forward_vel_int, [5, 50], Fs);
-% subplot(2, 3, 3);
-% plot_fft(forward_vel_int, Fs, L);
+subplot(2, 1, 2);
+plot_fft(forward_vel_int, Fs, length(forward_vel_int));
 
-subplot(2, 3, 5);
-plot(steps, forward_vel_int);
-
-subplot(2, 3, 6);
+% GPS differentiation for northing/easting velocity
 north_vel = diff(northing)./diff(gps_secs);
 east_vel = diff(easting)./diff(gps_secs);
 forward_vel = sqrt(north_vel.^2 + east_vel.^2);
+f5 = figure;
+subplot(2, 1, 1);
 plot((1:length(forward_vel)), forward_vel);
+subplot(2, 1, 2);
+plot(imu_traj_secs, forward_vel_int);
 
 % north_pos = cumtrapz(vel_x);
 % east_pos = cumtrapz(vel_y);
-north_pos = cumtrapz(forward_vel_int.*cos(yaw_mag));
-east_pos = cumtrapz(forward_vel_int.*sin(yaw_mag));
+north_pos = cumtrapz(vel_x.*cos(yaw_mag));
+east_pos = cumtrapz(vel_x.*sin(yaw_mag));
 north_gps = cumtrapz(north_vel);
 east_gps = cumtrapz(east_vel);
 
-start_n = north_gps(1);
-start_e = east_gps(1);
+north_traj_gps = north_gps(96:end, 1);
+east_traj_gps = east_gps(96:end, 1);
+start_n = north_traj_gps(1);
+start_e = east_traj_gps(1);
 north_pos = (north_pos - north_pos(1))+start_n;
 east_pos = (east_pos - east_pos(1))+start_e;
-
-subplot(2, 3, 6);
+fz = figure;
 scatter(east_pos, north_pos, 3, 'filled');
 hold on;
-scatter(east_gps, north_gps, 3, 'r', 'filled');
+scatter(east_traj_gps, north_traj_gps, 3, 'r', 'filled');
 hold off;
